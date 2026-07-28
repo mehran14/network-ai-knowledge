@@ -1,0 +1,135 @@
+NAT
+
+-------------------------------------------------------------
+HQ-EDGE1     |
+-------------
+
+conf t
+
+interface g0/1
+ description link-to-HQ-CORE1
+ ip nat inside
+exit
+
+interface g0/2
+ description link-to-HQ-CORE2
+ ip nat inside
+exit
+
+interface g0/0
+ description link-to-HQ-EDGE2 (iBGP Link)
+ ip nat inside
+exit
+
+interface g0/3
+ description link-to-ISP-R1
+ ip nat outside
+exit
+
+ip access-list extended NAT-ACL-HQ
+ deny ip 10.0.0.0 0.0.255.255 10.200.0.0 0.0.255.255  
+ deny ip 10.0.0.0 0.0.255.255 10.1.0.0 0.0.255.255    
+ permit ip 10.0.0.0 0.0.255.255 any                 
+exit
+
+route-map RM-NAT-HQ permit 10
+ match ip address NAT-ACL-HQ
+exit
+
+ip nat inside source route-map RM-NAT-HQ interface GigabitEthernet0/3 overload
+
+ip nat inside source static tcp 10.0.10.50 80 198.51.100.1 80 extendable
+ip nat inside source static tcp 10.0.10.50 443 198.51.100.1 443 extendable
+
+end
+wr
+
+-------------------------------------------------------------
+HQ-EDGE2     |
+-------------
+
+conf t
+
+interface g0/1
+ ip nat inside
+exit
+interface g0/2
+ ip nat inside
+exit
+interface g0/0
+ ip nat inside
+exit
+interface g0/3
+ ip nat outside
+exit
+
+ip access-list extended NAT-ACL-HQ-2
+ deny ip 10.0.0.0 0.0.255.255 10.200.0.0 0.0.255.255
+ deny ip 10.0.0.0 0.0.255.255 10.1.0.0 0.0.255.255
+ permit ip 10.0.0.0 0.0.255.255 any
+exit
+
+route-map RM-NAT-HQ-2 permit 10
+ match ip address NAT-ACL-HQ-2
+exit
+
+ip nat inside source route-map RM-NAT-HQ-2 interface GigabitEthernet0/3 overload
+
+ip nat inside source static tcp 10.0.10.50 80 198.51.100.5 80 extendable
+ip nat inside source static tcp 10.0.10.50 443 198.51.100.5 443 extendable
+
+end
+wr
+!
+
+show ip nat translation
+
+-------------------------------------------------------------
+BR-EDGE1     |
+-------------
+
+conf t
+
+ip access-list extended NAT-ACL-BRANCH
+ remark === Do NOT NAT Branch-to-HQ traffic ===
+ deny ip 10.1.0.0 0.0.255.255 10.0.0.0 0.0.255.255
+
+ remark === Optional: Do NOT NAT Branch transit/router-source traffic to HQ ===
+ deny ip 10.200.0.0 0.0.255.255 10.0.0.0 0.0.255.255
+
+ remark === NAT Branch LAN users to Internet ===
+ permit ip 10.1.0.0 0.0.255.255 any
+
+ remark === Optional: NAT Branch routers/transit IPs to Internet if needed ===
+ permit ip 10.200.0.0 0.0.255.255 any
+
+exit
+
+route-map RM-NAT-BRANCH permit 10
+ match ip address NAT-ACL-BRANCH
+exit
+
+interface g0/0
+ ip nat inside
+exit
+
+interface g0/1
+ ip nat inside
+exit
+
+interface g0/2
+ ip nat outside
+exit
+
+ip nat inside source route-map RM-NAT-BRANCH interface GigabitEthernet0/2 overload
+
+end
+wr
+!
+
+show ip nat translation
+
+
+
+
+

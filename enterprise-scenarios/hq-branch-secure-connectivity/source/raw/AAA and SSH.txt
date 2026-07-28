@@ -1,0 +1,31 @@
+AAA and SSH
+
+-------------------------------------------------------------
+HQ-EDGE1     |
+-------------
+
+conf t
+
+aaa new-model
+
+radius server NPS-HQ
+ address ipv4 10.0.20.10 auth-port 1812 acct-port 1813
+ key RadiusKey123
+
+aaa group server radius NPS-GROUP
+ server name NPS-HQ
+
+ip radius source-interface Loopback0
+
+aaa authentication login SSH-LOGIN group NPS-GROUP local
+aaa authorization exec SSH-AUTHZ group NPS-GROUP local if-authenticated
+aaa accounting exec SSH-ACCT start-stop group NPS-GROUP
+
+line vty 0 4
+ no login local
+ login authentication SSH-LOGIN
+ authorization exec SSH-AUTHZ
+ accounting exec SSH-ACCT
+end
+wr
+

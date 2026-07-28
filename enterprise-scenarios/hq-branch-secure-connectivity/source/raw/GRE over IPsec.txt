@@ -1,0 +1,176 @@
+GRE over IPsec
+
+-------------------------------------------------------------
+HQ-EDGE1     |
+-------------
+
+conf t
+
+! Phase 1: IKE Policy
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+exit
+
+! Pre-shared Key برای شعبه
+crypto isakmp key GRE_IPSEC_KEY address 198.51.100.10
+
+! Phase 2: Transform Set (Transport Mode برای تانل GRE بهتر است)
+crypto ipsec transform-set TS-GRE-IPSEC esp-aes 256 esp-sha-hmac
+ mode transport
+exit
+
+! IPsec Profile
+crypto ipsec profile PROF-GRE-IPSEC
+ set transform-set TS-GRE-IPSEC
+ set pfs group14
+exit
+
+
+interface Tunnel100
+ description GRE over IPsec to BR-EDGE1
+ ip address 172.16.100.1 255.255.255.252
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source g0/3
+ tunnel destination 198.51.100.10
+ tunnel mode gre ip
+ tunnel key 100
+ tunnel protection ipsec profile PROF-GRE-IPSEC
+ no shutdown
+exit
+
+! ایجاد لیست برای اجازه عبور شبکه شعبه
+ip prefix-list FROM-BRANCH seq 5 permit 10.1.0.0/16 le 32
+ip prefix-list FROM-BRANCH seq 7 permit 10.200.0.0/16 le 32
+ip prefix-list FROM-BRANCH seq 10 permit 33.33.33.33/32
+
+route-map RM-FROM-BRANCH permit 10
+ match ip address prefix-list FROM-BRANCH
+exit
+
+router bgp 65001
+ neighbor 172.16.100.2 remote-as 65002
+ neighbor 172.16.100.2 description BGP-to-BRANCH-over-Tunnel
+ neighbor 172.16.100.2 password CISCO_BGP
+ 
+ address-family ipv4
+  neighbor 172.16.100.2 activate
+  neighbor 172.16.100.2 route-map RM-FROM-BRANCH in
+  ! ما شبکه خودمان را قبلا با دستور network در BGP معرفی کرده‌ایم
+ exit-address-family
+exit
+
+! تزریق مسیرهای شعبه به OSPF داخلی HQ
+router ospf 1
+ redistribute bgp 65001 subnets route-map RM-FROM-BRANCH
+exit
+
+end
+wr
+!
+
+show ip route
+show ip interface brief | include Tunnel
+show crypto isakmp sa
+show ip bgp summary
+
+
+-------------------------------------------------------------
+BR-EDGE1     |
+-------------
+
+conf t
+
+! Phase 1: IKE Policy
+crypto isakmp policy 10
+ encr aes 256
+ hash sha
+ authentication pre-share
+ group 14
+ lifetime 86400
+exit
+
+! Pre-shared Key برای HQ
+crypto isakmp key GRE_IPSEC_KEY address 198.51.100.1
+
+! Phase 2: Transform Set
+crypto ipsec transform-set TS-GRE-IPSEC esp-aes 256 esp-sha-hmac
+ mode transport
+exit
+
+! IPsec Profile
+crypto ipsec profile PROF-GRE-IPSEC
+ set transform-set TS-GRE-IPSEC
+ set pfs group14
+exit
+
+interface Tunnel100
+ description GRE over IPsec to HQ-EDGE1
+ ip address 172.16.100.2 255.255.255.252
+ ip mtu 1400
+ ip tcp adjust-mss 1360
+ tunnel source g0/2
+ tunnel destination 198.51.100.1
+ tunnel mode gre ip
+ tunnel key 100
+ tunnel protection ipsec profile PROF-GRE-IPSEC
+ no shutdown
+exit
+
+
+! ایجاد لیست برای اجازه عبور شبکه HQ
+ip prefix-list FROM-HQ seq 5 permit 10.0.0.0/16 le 32
+ip prefix-list FROM-HQ seq 10 permit 11.11.11.11/32
+
+route-map RM-FROM-HQ permit 10
+ match ip address prefix-list FROM-HQ
+exit
+
+ip route 10.1.0.0 255.255.0.0 null0
+
+! ایجاد لیست برای ارسال شبکه شعبه به HQ
+ip prefix-list TO-HQ seq 5 permit 10.200.0.0/16 le 32
+ip prefix-list TO-HQ seq 7 permit 10.1.0.0/16 le 32
+ip prefix-list TO-HQ seq 10 permit 33.33.33.33/32
+
+route-map RM-TO-HQ permit 10
+ match ip address prefix-list TO-HQ
+exit
+
+router bgp 65002
+ neighbor 172.16.100.1 remote-as 65001
+ neighbor 172.16.100.1 description BGP-to-HQ-over-Tunnel
+ neighbor 172.16.100.1 password CISCO_BGP
+
+ address-family ipv4
+  neighbor 172.16.100.1 activate
+  neighbor 172.16.100.1 route-map RM-FROM-HQ in
+  neighbor 172.16.100.1 route-map RM-TO-HQ out
+  ! معرفی شبکه شعبه در BGP
+  network 10.200.0.0 mask 255.255.0.0
+  network 10.1.0.0 mask 255.255.0.0
+  network 33.33.33.33 mask 255.255.255.255
+ exit-address-family
+exit
+
+! تزریق مسیرهای HQ به OSPF داخلی شعبه
+router ospf 1
+ redistribute bgp 65002 subnets route-map RM-FROM-HQ
+exit
+
+end
+wr
+!
+
+
+show ip route
+show ip interface brief | include Tunnel
+show crypto isakmp sa
+show ip bgp summary
+
+
+

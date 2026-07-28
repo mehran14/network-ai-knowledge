@@ -1,0 +1,758 @@
+Internet BGP
+
+-------------------------------------------------------------
+ISP-R1 (AS 100 - Border Router)     |
+------------------------------------
+
+enable
+conf t
+
+hostname ISP-R1
+no ip domain-lookup
+
+service password-encryption
+enable secret 123
+
+username admin privilege 15 secret 123
+ip domain-name isp1.net
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 3 within 60
+
+line con 0
+ logging synchronous
+ exit
+
+access-list 10 permit 100.1.1.0 0.0.0.255
+
+line vty 0 4
+ logging synchronous
+ transport input ssh
+ transport output none
+ access-class 10 in
+ login local
+ exit
+
+! --- پیکربندی اینترفیس‌ها ---
+
+! Loopback اصلی جهت Router-ID و Peerهای BGP
+interface loopback0
+ description BGP-Router-ID
+ ip address 100.1.1.1 255.255.255.255
+ ip ospf network point-to-point
+ exit
+
+! Loopback شبیه‌سازی اینترنت (DNS عمومی)
+interface loopback88
+ description Simulated-Internet-GoogleDNS
+ ip address 8.8.8.8 255.255.255.255
+ exit
+
+! لینک متصل به مشتری (HQ-EDGE1)
+interface g0/0
+ description Link-to-HQ-EDGE1
+ ip address 198.51.100.2 255.255.255.252
+ no shutdown
+ exit
+
+! لینک متصل به روتر داخلی AS 100 (ISP-R5)
+interface g0/1
+ description Link-to-ISP-R5
+ ip address 100.0.0.1 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CISCO
+ no shutdown
+ exit
+
+! لینک متصل به ISP-R2 (AS 200)
+interface g0/3
+ description Link-to-ISP-R2
+ ip address 203.0.113.1 255.255.255.252
+ no shutdown
+ exit
+
+! لینک متصل به ISP-R4 (AS 200 - Core/RR)
+interface g0/2
+ description Link-to-ISP-R4
+ ip address 203.0.113.5 255.255.255.252
+ no shutdown
+ exit
+
+! --- پروتکل IGP (OSPF 100) برای پایداری داخلی AS 100 ---
+router ospf 100
+ router-id 100.1.1.1
+ passive-interface default
+ no passive-interface g0/1
+ network 100.1.1.1 0.0.0.0 area 0
+ network 100.0.0.0 0.0.0.3 area 0
+ exit
+
+! --- کنترل مسیرها و فیلترینگ (Prefix-Lists & Route-Maps) ---
+
+! پذیرش رنج عمومی سازمان HQ و رنج‌های معتبر WAN جهت جلوگیری از جعل مسیر
+ip prefix-list HQ-PUBLIC-RANGES permit 198.51.100.0/22 le 32
+
+! فیلتر کردن رنج‌های Private (RFC 1918) در مرزهای eBGP برای امنیت اینترنت
+ip prefix-list RFC1918 seq 5 deny 10.0.0.0/8 le 32
+ip prefix-list RFC1918 seq 10 deny 172.16.0.0/12 le 32
+ip prefix-list RFC1918 seq 15 deny 192.168.0.0/16 le 32
+ip prefix-list RFC1918 seq 20 permit 0.0.0.0/0 ge 1
+
+route-map BLOCK-PRIVATE-IN permit 10
+ match ip address prefix-list HQ-PUBLIC-RANGES
+ exit
+
+route-map INTERNET-OUT permit 10
+ match ip address prefix-list RFC1918
+ exit
+
+! --- پیکربندی پروتکل BGP (AS 100) ---
+router bgp 100
+ bgp router-id 100.1.1.1
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+
+ neighbor 100.5.5.5 remote-as 100
+ neighbor 100.5.5.5 update-source Loopback0
+ neighbor 100.5.5.5 password CISCO_IBGP
+
+ neighbor 198.51.100.1 remote-as 65001
+ neighbor 198.51.100.1 password ISP_PASS
+ neighbor 198.51.100.1 ttl-security hops 2
+ neighbor 198.51.100.1 timers 10 30
+
+ neighbor 203.0.113.2 remote-as 200
+ neighbor 203.0.113.2 password EBGP_ISP_PASS
+ neighbor 203.0.113.2 timers 10 30
+
+ neighbor 203.0.113.6 remote-as 200
+ neighbor 203.0.113.6 password EBGP_ISP_PASS
+ neighbor 203.0.113.6 timers 10 30
+
+ ! --- فعال‌سازی آدرس فمیلی IPv4 Unicast و اعمال سیاست‌ها ---
+ 
+ address-family ipv4
+
+  neighbor 198.51.100.1 activate
+  neighbor 198.51.100.1 default-originate
+  neighbor 198.51.100.1 route-map BLOCK-PRIVATE-IN in
+
+  neighbor 100.5.5.5 activate
+  neighbor 100.5.5.5 next-hop-self
+  neighbor 100.5.5.5 send-community both
+
+  neighbor 203.0.113.2 activate
+  neighbor 203.0.113.2 route-map INTERNET-OUT out
+  
+  neighbor 203.0.113.6 activate
+  neighbor 203.0.113.6 route-map INTERNET-OUT out
+
+   network 8.8.8.8 mask 255.255.255.255
+  network 100.1.1.1 mask 255.255.255.255
+  network 198.51.100.0 mask 255.255.255.252
+  exit
+
+exit
+exit
+wr
+!
+
+show ip bgp summary
+show ip route bgp
+show ip bgp neighbors 198.51.100.1 advertised-routes
+
+-------------------------------------------------------------
+ISP-R5 (AS 100 - Border Router)     |
+------------------------------------
+
+enable
+conf t
+
+hostname ISP-R5
+no ip domain-lookup
+
+service password-encryption
+enable secret 123
+
+username admin privilege 15 secret 123
+ip domain-name isp1.net
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 3 within 60
+
+line con 0
+ logging synchronous
+ exit
+
+access-list 10 permit 100.5.5.0 0.0.0.255
+
+line vty 0 4
+ logging synchronous
+ transport input ssh
+ transport output none
+ access-class 10 in
+ login local
+ exit
+
+! --- پیکربندی اینترفیس‌ها ---
+
+! Loopback اصلی جهت Router-ID و Peerهای BGP
+interface loopback0
+ description BGP-Router-ID
+ ip address 100.5.5.5 255.255.255.255
+ ip ospf network point-to-point
+ exit
+
+! لینک متصل به روتر داخلی AS 100 (ISP-R1)
+interface g0/1
+ description Link-to-ISP-R1
+ ip address 100.0.0.2 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CISCO
+ no shutdown
+ exit
+
+! لینک متصل به ISP-R4 (AS 200 - Core/RR)
+interface g0/0
+ description Link-to-ISP-R4
+ ip address 203.0.113.9 255.255.255.252
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ ip ospf authentication message-digest
+ no shutdown
+ exit
+
+! لینک متصل به ISP-R3 (AS 200)
+interface g0/2
+ description Link-to-ISP-R3
+ ip address 203.0.113.13 255.255.255.252
+ no shutdown
+ exit
+
+! --- پروتکل IGP (OSPF 100) برای پایداری داخلی AS 100 ---
+router ospf 100
+ router-id 100.5.5.5
+ passive-interface default
+ no passive-interface g0/1
+ network 100.5.5.5 0.0.0.0 area 0
+ network 100.0.0.0 0.0.0.3 area 0
+ exit
+
+! --- کنترل مسیرها و فیلترینگ (Prefix-Lists & Route-Maps) ---
+
+! فیلتر کردن رنج‌های Private (RFC 1918) در مرزهای eBGP
+ip prefix-list RFC1918 seq 5 deny 10.0.0.0/8 le 32
+ip prefix-list RFC1918 seq 10 deny 172.16.0.0/12 le 32
+ip prefix-list RFC1918 seq 15 deny 192.168.0.0/16 le 32
+ip prefix-list RFC1918 seq 20 permit 0.0.0.0/0 ge 1
+
+route-map INTERNET-OUT permit 10
+ match ip address prefix-list RFC1918
+ exit
+
+! --- پیکربندی پروتکل BGP (AS 100) ---
+router bgp 100
+ bgp router-id 100.5.5.5
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+
+ neighbor 100.1.1.1 remote-as 100
+ neighbor 100.1.1.1 update-source Loopback0
+ neighbor 100.1.1.1 password CISCO_IBGP
+
+ neighbor 203.0.113.10 remote-as 200
+ neighbor 203.0.113.10 password EBGP_ISP_PASS
+ neighbor 203.0.113.10 timers 10 30
+
+ neighbor 203.0.113.14 remote-as 200
+ neighbor 203.0.113.14 password EBGP_ISP_PASS
+ neighbor 203.0.113.14 timers 10 30
+
+ ! --- فعال‌سازی آدرس فمیلی IPv4 Unicast و اعمال سیاست‌ها ---
+ 
+address-family ipv4
+
+  neighbor 100.1.1.1 activate
+  neighbor 100.1.1.1 next-hop-self
+  neighbor 100.1.1.1 send-community both
+
+  neighbor 203.0.113.10 activate
+  neighbor 203.0.113.10 route-map INTERNET-OUT out
+  
+  neighbor 203.0.113.14 activate
+  neighbor 203.0.113.14 route-map INTERNET-OUT out
+
+  network 100.5.5.5 mask 255.255.255.255
+  exit-address-family
+
+exit
+exit
+wr
+!
+
+-------------------------------------------------------------
+ISP-R2 (AS 200 - Border Router)     |
+------------------------------------
+
+enable
+conf t
+
+hostname ISP-R2
+no ip domain-lookup
+
+service password-encryption
+enable secret 123
+
+username admin privilege 15 secret 123
+ip domain-name isp2.net
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 3 within 60
+
+no ip http server
+no ip http secure-server
+no cdp run
+
+line con 0
+ logging synchronous
+ exec-timeout 10 0
+ exit
+
+access-list 10 permit 200.0.0.0 0.255.255.255
+
+line vty 0 4
+ logging synchronous
+ exec-timeout 10 0
+ login local
+ transport input ssh
+ transport output none
+ access-class 10 in
+ exit
+
+interface Loopback0
+ description BGP-Router-ID
+ ip address 200.2.2.2 255.255.255.255
+ ip ospf network point-to-point
+ no shutdown
+ exit
+
+interface GigabitEthernet0/0
+ description Link-to-HQ-EDGE2
+ ip address 198.51.100.6 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/1
+ description Link-to-ISP-R4
+ ip address 200.0.0.1 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ no shutdown
+ exit
+
+interface GigabitEthernet0/2
+ description Link-to-ISP-R1
+ ip address 203.0.113.2 255.255.255.252
+ no shutdown
+ exit
+
+interface GigabitEthernet0/3
+ description Link-to-ISP-R3
+ ip address 200.0.0.5 255.255.255.252
+ ip ospf authentication message-digest
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ no shutdown
+ exit
+
+router ospf 200
+ router-id 200.2.2.2
+ passive-interface default
+ no passive-interface GigabitEthernet0/1
+ no passive-interface GigabitEthernet0/3
+ network 200.2.2.2 0.0.0.0 area 0
+ network 200.0.0.0 0.0.0.3 area 0
+ network 200.0.0.4 0.0.0.3 area 0
+ exit
+
+ip prefix-list DEFAULT-ONLY seq 5 permit 0.0.0.0/0
+ip prefix-list ENTERPRISE-IN seq 5 permit 10.0.0.0/16 le 32
+ip prefix-list ENTERPRISE-IN seq 10 permit 22.22.22.22/32
+ip prefix-list ENTERPRISE-IN seq 15 permit 198.51.100.4/30
+
+ip prefix-list PUBLIC-ONLY seq 5 deny 10.0.0.0/8 le 32
+ip prefix-list PUBLIC-ONLY seq 10 deny 172.16.0.0/12 le 32
+ip prefix-list PUBLIC-ONLY seq 15 deny 192.168.0.0/16 le 32
+ip prefix-list PUBLIC-ONLY seq 20 permit 0.0.0.0/0 ge 1
+
+route-map FROM-HQ permit 10
+ match ip address prefix-list ENTERPRISE-IN
+ exit
+
+route-map TO-HQ permit 10
+ match ip address prefix-list DEFAULT-ONLY
+ exit
+
+route-map TO-EBGP permit 10
+ match ip address prefix-list PUBLIC-ONLY
+ exit
+
+router bgp 200
+ bgp router-id 200.2.2.2
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+
+ neighbor 200.3.3.3 remote-as 200
+ neighbor 200.3.3.3 update-source Loopback0
+ neighbor 200.3.3.3 password CISCO_IBGP
+
+ neighbor 200.4.4.4 remote-as 200
+ neighbor 200.4.4.4 update-source Loopback0
+ neighbor 200.4.4.4 password CISCO_IBGP
+
+ neighbor 198.51.100.5 remote-as 65001
+ neighbor 198.51.100.5 password ISP_PASS
+ neighbor 198.51.100.5 ttl-security hops 2
+ neighbor 198.51.100.5 timers 10 30
+
+ neighbor 203.0.113.1 remote-as 100
+ neighbor 203.0.113.1 password EBGP_ISP_PASS
+ neighbor 203.0.113.1 timers 10 30
+
+ address-family ipv4
+  neighbor 200.3.3.3 activate
+  neighbor 200.3.3.3 next-hop-self
+  neighbor 200.3.3.3 send-community both
+
+  neighbor 200.4.4.4 activate
+  neighbor 200.4.4.4 next-hop-self
+  neighbor 200.4.4.4 send-community both
+
+  neighbor 198.51.100.5 activate
+  neighbor 198.51.100.5 default-originate
+  neighbor 198.51.100.5 route-map FROM-HQ in
+  neighbor 198.51.100.5 route-map TO-HQ out
+
+  neighbor 203.0.113.1 activate
+  neighbor 203.0.113.1 route-map TO-EBGP out
+
+  network 200.2.2.2 mask 255.255.255.255
+  network 198.51.100.4 mask 255.255.255.252
+ exit-address-family
+
+end
+wr
+!
+
+-------------------------------------------------------------
+ISP-R4 (AS 200 - Route Reflector)   |
+------------------------------------
+
+enable
+conf t
+
+hostname ISP-R4
+no ip domain-lookup
+
+service password-encryption
+enable secret 123
+
+username admin privilege 15 secret 123
+ip domain-name isp2.net
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 3 within 60
+
+no ip http server
+no ip http secure-server
+no cdp run
+
+line con 0
+ logging synchronous
+ exit
+
+access-list 10 permit 200.0.0.0 0.255.255.255
+
+line vty 0 4
+ logging synchronous
+ login local
+ transport input ssh
+ transport output none
+ access-class 10 in
+ exit
+
+interface Loopback0
+ description BGP-Router-ID
+ ip address 200.4.4.4 255.255.255.255
+ ip ospf network point-to-point
+ no shutdown
+ exit
+
+interface g0/2
+ description Link-to-ISP-R2
+ ip address 200.0.0.2 255.255.255.252
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ ip ospf authentication message-digest
+ no shutdown
+ exit
+
+interface g0/0
+ description Link-to-ISP-R3
+ ip address 200.0.0.9 255.255.255.252
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ ip ospf authentication message-digest
+ no shutdown
+ exit
+
+interface g0/3
+ description Link-to-ISP-R1
+ ip address 203.0.113.6 255.255.255.252
+ no shutdown
+ exit
+
+interface g0/1
+ description Link-to-ISP-R5
+ ip address 203.0.113.10 255.255.255.252
+ no shutdown
+ exit
+
+router ospf 200
+ router-id 200.4.4.4
+ passive-interface default
+ no passive-interface g0/2
+ no passive-interface g0/0
+ area 0 authentication message-digest
+ network 200.4.4.4 0.0.0.0 area 0
+ network 200.0.0.0 0.0.0.3 area 0
+ network 200.0.0.8 0.0.0.3 area 0
+ exit
+
+ip prefix-list PUBLIC-ONLY seq 5 deny 10.0.0.0/8 le 32
+ip prefix-list PUBLIC-ONLY seq 10 deny 172.16.0.0/12 le 32
+ip prefix-list PUBLIC-ONLY seq 15 deny 192.168.0.0/16 le 32
+ip prefix-list PUBLIC-ONLY seq 20 permit 0.0.0.0/0 ge 1
+
+route-map TO-EBGP permit 10
+ match ip address prefix-list PUBLIC-ONLY
+exit
+
+router bgp 200
+ bgp router-id 200.4.4.4
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+
+ neighbor 200.2.2.2 remote-as 200
+ neighbor 200.2.2.2 update-source Loopback0
+ neighbor 200.2.2.2 password CISCO_IBGP
+
+ neighbor 200.3.3.3 remote-as 200
+ neighbor 200.3.3.3 update-source Loopback0
+ neighbor 200.3.3.3 password CISCO_IBGP
+
+ neighbor 203.0.113.5 remote-as 100
+ neighbor 203.0.113.5 password EBGP_ISP_PASS
+ neighbor 203.0.113.5 timers 10 30
+
+ neighbor 203.0.113.9 remote-as 100
+ neighbor 203.0.113.9 password EBGP_ISP_PASS
+ neighbor 203.0.113.9 timers 10 30
+
+ address-family ipv4
+  neighbor 200.2.2.2 activate
+  neighbor 200.2.2.2 send-community both
+  neighbor 200.2.2.2 next-hop-self
+  neighbor 200.2.2.2 route-reflector-client
+
+  neighbor 200.3.3.3 activate
+  neighbor 200.3.3.3 send-community both
+  neighbor 200.3.3.3 next-hop-self
+  neighbor 200.3.3.3 route-reflector-client
+
+  neighbor 203.0.113.5 activate
+  neighbor 203.0.113.5 route-map TO-EBGP out
+
+  neighbor 203.0.113.9 activate
+  neighbor 203.0.113.9 route-map TO-EBGP out
+
+  network 200.4.4.4 mask 255.255.255.255
+ exit-address-family
+
+end
+wr
+!
+
+-------------------------------------------------------------
+ISP-R3 (AS 200 - Border Router)   |
+----------------------------------
+
+enable
+conf t
+
+hostname ISP-R3
+no ip domain-lookup
+
+service password-encryption
+enable secret 123
+
+username admin privilege 15 secret 123
+ip domain-name isp2.net
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+login block-for 120 attempts 3 within 60
+
+no ip http server
+no ip http secure-server
+no cdp run
+
+line con 0
+ logging synchronous
+ exit
+
+access-list 10 permit 200.0.0.0 0.255.255.255
+
+line vty 0 4
+ logging synchronous
+ login local
+ transport input ssh
+ transport output none
+ access-class 10 in
+ exit
+
+interface Loopback0
+ description BGP-Router-ID
+ ip address 200.3.3.3 255.255.255.255
+ ip ospf network point-to-point
+ no shutdown
+ exit
+
+interface g0/1
+ description Link-to-ISP-R4
+ ip address 200.0.0.10 255.255.255.252
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ ip ospf authentication message-digest
+ no shutdown
+ exit
+
+interface g0/3
+ description Link-to-ISP-R2
+ ip address 200.0.0.6 255.255.255.252
+ ip ospf message-digest-key 1 md5 CISCO_OSPF
+ ip ospf authentication message-digest
+ no shutdown
+ exit
+
+interface g0/0
+ description Link-to-BR-EDGE1
+ ip address 198.51.100.9 255.255.255.252
+ no shutdown
+ exit
+
+interface g0/2
+ description Link-to-ISP-R5
+ ip address 203.0.113.14 255.255.255.252
+ no shutdown
+ exit
+
+router ospf 200
+ router-id 200.3.3.3
+ passive-interface default
+ no passive-interface g0/3
+ no passive-interface g0/1
+ area 0 authentication message-digest
+ network 200.3.3.3 0.0.0.0 area 0
+ network 200.0.0.4 0.0.0.3 area 0
+ network 200.0.0.8 0.0.0.3 area 0
+ exit
+
+ip prefix-list DEFAULT-ONLY permit 0.0.0.0/0
+ip prefix-list BRANCH-IN seq 5 permit 10.1.0.0/16 le 32
+ip prefix-list BRANCH-IN seq 10 permit 33.33.33.33/32
+
+ip prefix-list PUBLIC-ONLY seq 5 deny 10.0.0.0/8 le 32
+ip prefix-list PUBLIC-ONLY seq 10 deny 172.16.0.0/12 le 32
+ip prefix-list PUBLIC-ONLY seq 15 deny 192.168.0.0/16 le 32
+ip prefix-list PUBLIC-ONLY seq 20 permit 0.0.0.0/0 ge 1
+
+route-map FROM-BR permit 10
+ match ip address prefix-list BRANCH-IN
+exit
+
+route-map TO-BR permit 10
+ match ip address prefix-list DEFAULT-ONLY
+exit
+
+route-map TO-EBGP permit 10
+ match ip address prefix-list PUBLIC-ONLY
+exit
+
+ip prefix-list BRANCH-IN seq 15 permit 198.51.100.8/30
+
+router bgp 200
+ bgp router-id 200.3.3.3
+ bgp log-neighbor-changes
+ no bgp default ipv4-unicast
+
+ neighbor 200.2.2.2 remote-as 200
+ neighbor 200.2.2.2 update-source Loopback0
+ neighbor 200.2.2.2 password CISCO_IBGP
+
+ neighbor 200.4.4.4 remote-as 200
+ neighbor 200.4.4.4 update-source Loopback0
+ neighbor 200.4.4.4 password CISCO_IBGP
+
+ neighbor 203.0.113.13 remote-as 100
+ neighbor 203.0.113.13 password EBGP_ISP_PASS
+ neighbor 203.0.113.13 timers 10 30
+
+ neighbor 198.51.100.10 remote-as 65002
+ neighbor 198.51.100.10 password ISP_PASS
+ neighbor 198.51.100.10 ttl-security hops 2
+ neighbor 198.51.100.10 timers 10 30
+
+ address-family ipv4
+
+  network 198.51.100.8 mask 255.255.255.252
+  neighbor 198.51.100.10 default-originate
+
+  neighbor 200.2.2.2 activate
+  neighbor 200.2.2.2 next-hop-self
+  neighbor 200.2.2.2 send-community both
+
+  neighbor 200.4.4.4 activate
+  neighbor 200.4.4.4 next-hop-self
+  neighbor 200.4.4.4 send-community both
+
+  neighbor 198.51.100.10 activate
+  neighbor 198.51.100.10 route-map FROM-BR in
+  neighbor 198.51.100.10 route-map TO-BR out
+
+  neighbor 203.0.113.13 activate
+  neighbor 203.0.113.13 route-map TO-EBGP out
+
+  network 200.3.3.3 mask 255.255.255.255
+ exit-address-family
+
+end
+wr
+!
+
+
+
+
+
+
+
+
+
+
+
+
+
