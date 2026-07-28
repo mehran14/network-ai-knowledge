@@ -224,13 +224,13 @@ Depending on interface and area placement, an OSPF router can have one or more r
 
 | Backbone Router | At least one OSPF interface belongs to Area 0 |
 
-| Area Border Router | Connects Area 0 to one or more non-backbone areas |
+| Area Border Router (ABR) | Connects Area 0 to one or more non-backbone areas |
 
-| Autonomous System Boundary Router | Redistributes routes from another routing source into OSPF |
+| Autonomous System Boundary Router (ASBR) | Redistributes routes from another routing source into OSPF |
 
-| Designated Router | Represents a multiaccess network and reduces adjacency requirements |
+| Designated Router (DR) | Represents a multiaccess network and reduces adjacency requirements |
 
-| Backup Designated Router | Provides backup functionality for the Designated Router |
+| Backup Designated Router (BDR) | Provides backup functionality for the Designated Router |
 
 
 
