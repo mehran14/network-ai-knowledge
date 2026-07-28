@@ -14,13 +14,13 @@ document\_type: "concept"
 
 source\_type: "official\_documentation"
 
-source\_title: ""
+source\_title: "Understand OSPF Neighbor States"
 
-source\_url: ""
+source\_url: "https://www.cisco.com/c/en/us/support/docs/ip/open-shortest-path-first-ospf/13685-13.html"
 
-verified: false
+verified: true
 
-last\_reviewed: ""
+last\_reviewed: "2026-07-28"
 
 tags:
 
@@ -629,9 +629,25 @@ undebug all
 
 ### References
 
-1. Cisco OSPF Configuration Guide
-2. Cisco OSPF Command Reference
-3. RFC 2328 — OSPF Version 2
+1\. Cisco, "Understand OSPF Neighbor States," Document ID 13685,
+
+&#x20;  updated February 29, 2024.  
+
+&#x20;  https://www.cisco.com/c/en/us/support/docs/ip/open-shortest-path-first-ospf/13685-13.html
 
 
+
+2\. Cisco, "Troubleshoot OSPF Neighbor Problems," Document ID 13699,
+
+&#x20;  updated August 14, 2023.  
+
+&#x20;  https://www.cisco.com/c/en/us/support/docs/ip/open-shortest-path-first-ospf/13699-29.html
+
+
+
+3\. J. Moy, "OSPF Version 2," RFC 2328, Sections 7 and 10,
+
+&#x20;  Internet Engineering Task Force, April 1998.  
+
+&#x20;  
 
