@@ -14,13 +14,13 @@ document\_type: "concept"
 
 source\_type: "official\_documentation"
 
-source\_title: "Cisco OSPF Configuration Guide"
+source\_title: "OSPF Configuration Guide — Cisco IOS XE"
 
-source\_url: ""
+source\_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/c9000/lyr3-fwd/ospf/ospf-configuration-guide/ospf.html"
 
-verified: false
+verified: true
 
-last\_reviewed: ""
+last\_reviewed: "2026-07-28"
 
 tags:
 
@@ -383,31 +383,9 @@ On Cisco IOS and IOS XE, the OSPF network statement matches local interface addr
 
 ### References
 
-1. Cisco OSPF Configuration Guide
-2. RFC 2328 — OSPF Version 2
-3. RFC 5340 — OSPF for IPv6
+1\. \[Cisco — OSPF Configuration Guide, Cisco IOS XE](https://www.cisco.com/c/en/us/td/docs/switches/lan/c9000/lyr3-fwd/ospf/ospf-configuration-guide/ospf.html)
 
+2\. \[IETF RFC 2328 — OSPF Version 2](https://www.rfc-editor.org/rfc/rfc2328)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+3\. \[IETF RFC 5340 — OSPF for IPv6](https://www.rfc-editor.org/info/rfc5340/)
 
