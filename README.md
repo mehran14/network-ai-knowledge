@@ -10,7 +10,7 @@ This repository contains curated and structured technical knowledge for a local 
 
 
 
-##### Initial Scope
+### Initial Scope
 
 
 
@@ -26,7 +26,7 @@ The first version covers:
 
 
 
-##### Content Types
+### Content Types
 
 
 
@@ -42,7 +42,7 @@ Documents are organized into the following types:
 
 
 
-##### Source Priority
+### Source Priority
 
 
 
@@ -56,11 +56,9 @@ Documents are organized into the following types:
 
 
 
-##### Current Status
+### Current Status
 
 
 
 Repository structure created. Knowledge documents have not yet been added.
-
-
 
